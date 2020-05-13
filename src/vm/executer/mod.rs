@@ -36,6 +36,7 @@ pub struct Closure {
 // unsafe impl Send for JoinHandlePtr{}
 // unsafe impl Sync for JoinHandlePtr{}
 use async_std::sync::{Receiver, Sender};
+use super::gc::lemongc::*;
 #[derive(Debug, Clone, PartialEq)]
 pub enum PrimeValue {
     Null,
@@ -53,7 +54,7 @@ pub enum PrimeValue {
     Row(Row),
     Closure(Closure), //TODO: 完成这玩意儿
     NType(Type),      // V just for naming issue, so this is only used in reflection!
-
+    Ref(*mut HeapHandle),
     Thread(u32,Option<stack::Stack>), //TODO: 完成这玩意儿
     Channel(CSender, CReceiver),
 
@@ -222,6 +223,8 @@ impl From<PrimeValue> for Type {
             NType(t) => Self::Kind,
             Thread(_,_) => Self::Mono(TAG_THREAD),
             Error(v) => Self::Poly(Box::new(Self::Mono(TAG_ERROR)),vec!(v.1.clone())),
+            // type should created dynamiclly in state
+            // Ref(r) => Self::Poly(Box::new(Self::Mono(TAG_REF)),vec!()),
             _ => unimplemented!(),
         }
     }

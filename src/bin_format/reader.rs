@@ -255,7 +255,6 @@ impl Reader {
         self.read_vec(|r| {
             let tag = r.read_byte();
             match tag {
-                0x00 => r.read_bytes(4),
                 0xFF => {
                     r.pos += 1; //skip op
                     let offset = r.read_byte();
@@ -265,7 +264,7 @@ impl Reader {
                     // op len off data
                     r.read_bytes((total_len + 3) as usize)
                 }
-                _ => unimplemented!(),
+                _ => {r.pos -= 1; r.read_bytes(4)},
             }
         })
     }

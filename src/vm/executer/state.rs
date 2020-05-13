@@ -9,12 +9,14 @@ pub enum Status {
 use super::super::VMMessage;
 use super::stack::IR;
 use async_std::sync::*;
+use super::super::gc::lemongc::*;
 pub struct State {
     pub debug_mode: bool,
     pub uuid: u32,
     pub status: Status,
     pub frames: Vec<Stack>,
     pub sr: (Sender<String>, Receiver<VMMessage>),
+    pub copy_heap : CopyHeap,
 }
 unsafe impl Send for State {}
 unsafe impl Sync for State {}
@@ -25,6 +27,17 @@ impl State {
         self.frames
             .last_mut()
             .expect("ERROR! FAILED TO GET CURRENT CALL STACK")
+    }
+
+    #[inline]
+    pub fn cleanup(&mut self){
+        let mut v = vec!();
+        for s in &self.stack().fixed_tops(){
+            if let super::PrimeValue::Ref(r) = s.0{
+                v.push(unsafe{(*r).clone()});
+            }
+        }
+        self.copy_heap.clean(&mut v);
     }
 
     pub fn stack_with_name(&self) -> Vec<(super::super::super::VMSym, super::Value)> {
@@ -74,6 +87,7 @@ impl State {
             frames: vec![],
             status: Status::RUNNING,
             sr: (sender, receiver),
+            copy_heap:CopyHeap::new()
         }
     }
     #[inline]
@@ -319,6 +333,7 @@ impl State {
                                 self.stack().fixed_top = 255;
                             }
                             RET => {
+                                self.cleanup();
                                 let s = self.frames.pop();
                                 if self.frames.len() == 0 {
                                     return (s.unwrap().fixed_tops(),None);
@@ -326,6 +341,7 @@ impl State {
                             }
                             RETURN => {
                                 // pop function call
+                                self.cleanup();
                                 let mut res = self.frames.pop().unwrap().fixed_tops();
                                 if self.frames.len() == 0 {
                                     return (res, None);
@@ -626,13 +642,13 @@ impl State {
                                     .push(super::Value::from(super::PrimeValue::from(
                                         super::super::super::bin_format::constant_and_pool::get_constant(func.0, func.1),
                                     )));
-                            }
+                            },
                             FIXTOP => {
                                 let idx = unsafe {
                                     FIXTOP_OP.get_fix().opmode.get_a(*(ins.0 as *const u32))
                                 };
                                 self.stack().fix_to_top(idx as usize);
-                            }
+                            },
                             NEWTHREAD => {
                                 let idx = unsafe {
                                     NEWTHREAD_OP.get_fix().opmode.get_a(*(ins.0 as *const u32))
@@ -651,7 +667,7 @@ impl State {
                                 } else {
                                     panic!("ERROR CURRENT STACK ADDRESS IS NOT CLOSURE")
                                 }
-                            }
+                            },
                             GETTRET => {
                                 let idx = unsafe {
                                     GETTRET_OP.get_fix().opmode.get_a(*(ins.0 as *const u32))
@@ -668,8 +684,7 @@ impl State {
                                     println!("thread returned:\n  {:?}", res);
                                     self.stack().stack.append(&mut res.0);
                                 }
-                            }
-
+                            },
                             GETYIELD => {
                                 let idx = unsafe {
                                     GETTRET_OP.get_fix().opmode.get_a(*(ins.0 as *const u32))
@@ -705,6 +720,42 @@ impl State {
                                     panic!("ERROR! IDX IS NOT ERROR");
                                 }
     
+                            },
+                            REF => {
+                                let idx = unsafe {
+                                    REF_OP.get_fix().opmode.get_a(*(ins.0 as *const u32))
+                                };
+                                let v = self.stack().get(idx as usize);
+                                let ty = v.1.clone();
+                                let reff = super::PrimeValue::Ref(self.copy_heap.push(v.clone()));
+                                use super::super::super::Type;
+                                use super::super::super::TAG_REF;
+                                let vr = super::Value(reff,Type::Poly(Box::new(Type::Mono(TAG_REF)),vec!(ty)));
+                                self.stack().set(idx as usize, vr);
+                            },
+                            UNREF => {
+                                let idx = unsafe {
+                                    UNREF_OP.get_fix().opmode.get_a(*(ins.0 as *const u32))
+                                };
+                                let r = self.stack().get(idx as usize).0;
+                                if let super::PrimeValue::Ref(r) = r {
+                                    let v = self.copy_heap.get(unsafe{&*r});
+                                    self.stack().push(v);
+                                }else{
+                                    panic!("ERROR! RS({}) IS NOT A REFERENCE",idx);
+                                }
+                            },
+                            MODREF => {
+                                let (idx,idx2) = unsafe {
+                                    MODREF_OP.get_fix().opmode.get_ab(*(ins.0 as *const u32))
+                                };
+                                let r = self.stack().get(idx as usize).0;
+                                let v2 = self.stack().get(idx2 as usize);
+                                if let super::PrimeValue::Ref(r) = r {
+                                    let v = self.copy_heap.set(unsafe{&*r},v2);
+                                }else{
+                                    panic!("ERROR! RS({}) IS NOT A REFERENCE",idx);
+                                }
                             }
                             _ => unimplemented!(),
                         }
@@ -734,18 +785,21 @@ impl State {
         match self.status {
             Status::RUNNING => panic!("ERROR? NO WAY! IS RUNNING!"),
             Status::ERROR => {
+                self.cleanup();
                 println!("{}","STOPED WITH ERROR OCCURS".red());
                 let stack: Stack = self.frames.last().unwrap().clone();
                 return (self.stack().fixed_tops(), Some(stack));
             }
             Status::YIELD => {
                 println!("YIELDED");
+                self.cleanup();
                 self.stack().fixed_top = 255;
                 let stack: Stack = self.frames.last().unwrap().clone();
                 return (self.stack().fixed_tops(), Some(stack));
             }
             Status::STOP => {
                 println!("STOPED");
+                self.cleanup();
                 let stack: Stack = self.frames.last().unwrap().clone();
                 return (self.stack().fixed_tops(), Some(stack));
             }

@@ -6,7 +6,6 @@ pub const SETCC: u8 = 0x41;
 
 pub const GETROW: u8 = 0x42;
 pub const SETROW: u8 = 0x43;
-pub const NEWROW: u8 = 0x44; //heap
 
 pub const CLOSURE: u8 = 0x45;
 pub const VARG: u8 = 0x46;
@@ -24,7 +23,7 @@ pub const NEWTHREAD: u8 = 0x4e;
 pub const GETYIELD: u8 = 0x4f;
 pub const GETTRET: u8 = 0x50;
 
-pub const REF:u8 = 0x51;
+pub const REF:u8 = 0x44;
 pub const UNREF:u8 = 0x52; // copy
 pub const MODREF:u8 = 0x55;
 
@@ -44,3 +43,6 @@ pub const NEWTHREAD_OP: Op = Op::FIX(FixOp {op:NEWTHREAD,opmode:FixOpMode::A(RS)
 pub const GETYIELD_OP:Op = Op::FIX(FixOp {op:GETYIELD,opmode:FixOpMode::A(RS)});
 pub const GETTRET_OP:Op = Op::FIX(FixOp {op:GETTRET,opmode:FixOpMode::A(RS)});
 pub const GETERR_OP:Op = Op::FIX(FixOp {op:GETTRET,opmode:FixOpMode::A(RS)});
+pub const REF_OP:Op = Op::FIX(FixOp {op:REF,opmode:FixOpMode::A(RS)});
+pub const UNREF_OP:Op = Op::FIX(FixOp {op:UNREF,opmode:FixOpMode::A(RS)});
+pub const MODREF_OP:Op = Op::FIX(FixOp {op:MODREF,opmode:FixOpMode::AB(RS,RS)});

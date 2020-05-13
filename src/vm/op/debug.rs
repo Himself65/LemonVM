@@ -1,4 +1,4 @@
-// ===== FOR DEBUG USE ===== 0xE0-0xFF
+// ===== FOR DEBUG USE ===== 0xE0-0xFE
 use super::*;
 pub const ASSERTEQ: u8 = 0xE0;
 pub const ASSERTNE: u8 = 0xE1;
